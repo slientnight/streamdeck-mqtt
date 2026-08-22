@@ -1,7 +1,84 @@
 # Streamdeck MQTT
 
-I created this project because i wanted to have an stream deck as an controller for
-home assistant. It is using this [library](https://github.com/abcminiuser/python-elgato-streamdeck#python-elgato-stream-deck-library)
+> **Fork note:** This is a fork of [LukasOchmann/streamdeck-mqtt](https://github.com/LukasOchmann/streamdeck-mqtt) with native (Docker-free) installation support for Raspberry Pi Zero W (ARMv6) and a pre-configured Home Assistant office control layout. See [NATIVE_INSTALL.md](NATIVE_INSTALL.md) for the non-Docker setup guide.
+
+A Stream Deck to Home Assistant bridge via MQTT. It is using this [library](https://github.com/abcminiuser/python-elgato-streamdeck#python-elgato-stream-deck-library).
+
+## What this fork changes
+
+| Area | Original | This fork |
+|------|----------|-----------|
+| Installation | Docker only | Docker + native install on Pi Zero W (ARMv6) |
+| `main.py` | Queries deck before `deck.open()` | Calls `deck.open()` immediately after enumeration |
+| `StreamDeckMQTT.py` | Calls `self.deck.open()` again inside `init()` | Removed duplicate open (deck is already open) |
+| HIDAPI backend | Assumes libusb | Supports hidraw backend (required on Pi Zero W) |
+| Key layout | Empty by default | Pre-configured 12-key office control layout |
+| HA automations | None included | 12 MQTT-triggered automations for office devices |
+
+## My Key Layout (Elgato Stream Deck Original, 15 keys)
+
+![Stream Deck Layout](docs/streamdeck.JPEG)
+
+```
+┌─────────────┬─────────────┬─────────────┬─────────────┬─────────────┐
+│ 0: Office   │ 1: Office   │ 2: Office   │ 3: Key Light│ 4: Key Light│
+│ Light ⚡    │ Bright +    │ Bright -    │ Toggle 💡   │ Bright +    │
+├─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
+│ 5: Key Light│ 6: Key Light│ 7: Fan      │ 8: Fan      │ 9: Fan      │
+│ Bright -    │ Temp 🌡️     │ HIGH        │ MEDIUM      │ LOW         │
+├─────────────┼─────────────┼─────────────┼─────────────┼─────────────┤
+│10: Fan      │11: Outlet   │12:          │13:          │14:          │
+│ OFF         │ Toggle      │ (empty)     │ (empty)     │ (empty)     │
+└─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
+```
+
+### Key Actions
+
+| Key | Icon | Action |
+|-----|------|--------|
+| 0 | `mdi:ceiling-light` (yellow) | Toggle office ceiling light (Inovelli dimmer) |
+| 1 | `mdi:brightness-5` (white) | Office light brightness +25% |
+| 2 | `mdi:brightness-3` (gray) | Office light brightness -25% |
+| 3 | `mdi:lightbulb-spot` (orange) | Toggle Elgato Key Light |
+| 4 | `mdi:arrow-up-bold` (orange) | Key Light brightness +25% |
+| 5 | `mdi:arrow-down-bold` (orange) | Key Light brightness -25% |
+| 6 | `mdi:thermometer` (purple) | Cycle Key Light color temp (3000K → 4500K → 6500K) |
+| 7 | `mdi:fan-speed-3` (cyan) | Office fan HIGH (99%) |
+| 8 | `mdi:fan-speed-2` (teal) | Office fan MEDIUM (66%) |
+| 9 | `mdi:fan-speed-1` (lightblue) | Office fan LOW (33%) |
+| 10 | `mdi:fan-off` (red) | Office fan OFF |
+| 11 | `mdi:power-plug` (green) | Toggle office outlet |
+
+### Home Assistant Automations
+
+The following automations are created in HA to listen for MQTT messages from the Stream Deck and control the corresponding entities:
+
+| Automation | MQTT Topic | HA Entity |
+|------------|-----------|-----------|
+| StreamDeck - Office Light Toggle | `streamdeck/0` | `light.office_office_celling_light` |
+| StreamDeck - Office Light Brightness Up | `streamdeck/1` | `light.office_office_celling_light` |
+| StreamDeck - Office Light Brightness Down | `streamdeck/2` | `light.office_office_celling_light` |
+| StreamDeck - Key Light Toggle | `streamdeck/3` | `light.elgato_bw36j1a00874` |
+| StreamDeck - Key Light Brightness Up | `streamdeck/4` | `light.elgato_bw36j1a00874` |
+| StreamDeck - Key Light Brightness Down | `streamdeck/5` | `light.elgato_bw36j1a00874` |
+| StreamDeck - Key Light Color Temp Cycle | `streamdeck/6` | `light.elgato_bw36j1a00874` + `input_select.key_light_color_temp` |
+| StreamDeck - Office Fan High | `streamdeck/7` | `fan.office_office_fan` |
+| StreamDeck - Office Fan Medium | `streamdeck/8` | `fan.office_office_fan` |
+| StreamDeck - Office Fan Low | `streamdeck/9` | `fan.office_office_fan` |
+| StreamDeck - Office Fan Off | `streamdeck/10` | `fan.office_office_fan` |
+| StreamDeck - Office Outlet Toggle | `streamdeck/11` | `switch.office_office_outlet` |
+
+### HA Helpers Required
+
+| Helper | Type | Purpose |
+|--------|------|---------|
+| `input_select.key_light_color_temp` | Input Select (3000, 4500, 6500) | Tracks color temp cycle state for Key Light |
+
+### Notes
+
+- The Inovelli dimmer must be in **Dimmer mode** (not On/Off mode) for brightness controls to work. Check `select.office_office_celling_light_dimmer_mode` in HA.
+- The color temp cycle button rotates through warm (3000K) → neutral (4500K) → cool (6500K) on each press.
+- The office fan uses percentage-based speed: 33% (low), 66% (medium), 99% (high).
 
 
 ## Hardware
