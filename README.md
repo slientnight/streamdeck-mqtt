@@ -96,14 +96,121 @@ The following automations are created in HA to listen for MQTT messages from the
 
 ## Installation (Native, Pi Zero W)
 
-See [NATIVE_INSTALL.md](NATIVE_INSTALL.md) for the full step-by-step guide covering:
+### 1. Flash the OS
 
-1. System dependencies
-2. HIDAPI backend fix (hidraw instead of libusb)
-3. Udev rules for USB access
-4. Python venv setup
-5. `.env` and `data.json` configuration
-6. Systemd service for auto-start
+Use the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) and pick
+**Raspberry Pi OS Lite (32-bit)**. In the settings dialog configure:
+
+- hostname (e.g. `streamdeck`)
+- username and password
+- Wi-Fi SSID and password — the Pi Zero W only supports **2.4 GHz** networks
+- enable SSH
+
+Write the card, plug in the Stream Deck via the OTG adapter (or powered hub), and power up.
+
+### 2. Install system dependencies
+
+```sh
+sudo apt update
+sudo apt install -y git python3 python3-venv python3-dev build-essential pkg-config \
+  libcairo2-dev libhidapi-hidraw0 libhidapi-libusb0 libhidapi-dev \
+  libusb-1.0-0-dev libffi-dev libjpeg-dev zlib1g-dev \
+  libfreetype6-dev liblcms2-dev libopenjp2-7-dev libtiff-dev
+```
+
+### 3. Fix HIDAPI backend
+
+The Pi Zero W needs the hidraw backend symlinked in place of libusb:
+
+```sh
+sudo ln -sf libhidapi-hidraw.so.0.0.0 /usr/lib/arm-linux-gnueabihf/libhidapi-libusb.so.0
+sudo ln -sf libhidapi-hidraw.so.0.0.0 /usr/lib/arm-linux-gnueabihf/libhidapi-libusb.so
+sudo ldconfig
+```
+
+### 4. Udev rules
+
+Create `/etc/udev/rules.d/99-streamdeck.rules`:
+
+```
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", MODE="0666"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", MODE="0666"
+```
+
+Then reload:
+
+```sh
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Unplug and replug the Stream Deck after this step.
+
+### 5. Clone and install
+
+```sh
+cd ~
+git clone https://github.com/slientnight/streamdeck-mqtt.git
+cd streamdeck-mqtt
+python3 -m venv .venv
+./.venv/bin/python -m pip install --upgrade pip setuptools wheel
+./.venv/bin/python -m pip install --prefer-binary -r requirements.txt
+```
+
+### 6. Configure
+
+Create `.env`:
+
+```
+MQTT_HOST=192.168.1.50
+MQTT_PORT=1883
+MQTT_USER=your-mqtt-user
+MQTT_PASS=your-mqtt-password
+```
+
+Create `data.json`:
+
+```json
+{"brightness":60,"keys":[]}
+```
+
+### 7. Test
+
+```sh
+./.venv/bin/python src/main.py
+```
+
+The log prints the deck type, key count, and serial number — you need the serial number to address the deck individually via MQTT.
+
+### 8. Systemd service (auto-start on boot)
+
+Create `/etc/systemd/system/streamdeck-mqtt.service`:
+
+```ini
+[Unit]
+Description=Stream Deck MQTT bridge
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=<your-user>
+WorkingDirectory=/home/<your-user>/streamdeck-mqtt
+ExecStart=/home/<your-user>/streamdeck-mqtt/.venv/bin/python src/main.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now streamdeck-mqtt
+```
 
 
 ## Data.json
