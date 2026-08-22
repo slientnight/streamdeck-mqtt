@@ -135,7 +135,7 @@ class StreamDeckMQTT:
                 self.mqtt_client.subscribe("streamdeck/{}/config/{}".format(serialNumber, idx))
            
             
-            self.deck.open()
+
             self.deck.reset()
             self.deck.set_key_callback(self.key_change_callback)
 

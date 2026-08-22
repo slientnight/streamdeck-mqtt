@@ -91,6 +91,8 @@ if __name__ == "__main__":
                 continue
 
             try:
+                deck.open()
+
                 mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
                 mqttc.username_pw_set(MQTT_USER, MQTT_PASS)
                 mqttc.connect(MQTT_HOST, MQTT_PORT, 60)
