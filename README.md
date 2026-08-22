@@ -86,133 +86,24 @@ The following automations are created in HA to listen for MQTT messages from the
 | Part | Notes |
 | --- | --- |
 | Elgato Stream Deck | Original, Original V2, MK.2, Mini, Mini MK.2, XL, XL V2, Neo, Plus and Pedal are supported by the underlying [python-elgato-streamdeck](https://github.com/abcminiuser/python-elgato-streamdeck) library |
-| Raspberry Pi | Anything that can run the prebuilt images: `arm64` (Pi 3/4/5, Pi Zero 2 W with a 64-bit OS) or `arm/v7` (Pi 2/3, Pi Zero 2 W with a 32-bit OS). The **original** Pi Zero / Zero W is ARMv6 and is *not* covered by the prebuilt images — you would have to build the image yourself on that hardware |
+| Raspberry Pi Zero W | Original Pi Zero / Zero W (ARMv6). This fork exists because the original Docker images don't support ARMv6 |
 | microSD card | 8 GB or more, for Raspberry Pi OS Lite |
 | Power supply | The official supply for your Pi model |
-| USB OTG adapter | Only for the Pi Zero 2 W: micro-USB (male) to USB-A (female), plugged into the **middle** port labelled `USB`, not the one labelled `PWR` |
-| Powered USB hub | Recommended, especially for the larger decks (XL, MK.2). The Stream Deck is fed from the Pi's USB port, and an unpowered Zero 2 W port can be marginal — if the deck resets or is not detected reliably, a powered hub usually fixes it |
+| USB OTG adapter | micro-USB (male) to USB-A (female), plugged into the **middle** port labelled `USB`, not the one labelled `PWR` |
+| Powered USB hub | Recommended. The Stream Deck draws more current than the Pi Zero can reliably provide — if the deck resets or is not detected, a powered hub fixes it |
 
-Everything below uses a Raspberry Pi Zero 2 W as the example, but the steps are
-identical on any other Pi.
+> **Want Docker instead?** If you're running a Pi 3/4/5 or Pi Zero 2 W, the original repo has pre-built Docker images that work out of the box. See [LukasOchmann/streamdeck-mqtt](https://github.com/LukasOchmann/streamdeck-mqtt) for the Docker setup.
 
-## Setting up a Raspberry Pi Zero 2 W
+## Installation (Native, Pi Zero W)
 
-### 1. Flash the OS
+See [NATIVE_INSTALL.md](NATIVE_INSTALL.md) for the full step-by-step guide covering:
 
-Use the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) and pick
-**Raspberry Pi OS Lite (64-bit)** — no desktop needed, and the 64-bit build pulls
-the `arm64` image. In the Imager's settings dialog (the gear / "Edit settings")
-configure before writing:
-
-- hostname (e.g. `streamdeck`)
-- username and password
-- Wi-Fi SSID and password — the Zero 2 W only supports **2.4 GHz** networks
-- enable SSH
-
-Write the card, put it into the Pi, connect the Stream Deck through the OTG
-adapter (or the powered hub) and power the Pi up.
-
-### 2. Log in and update
-
-```sh
-ssh <user>@streamdeck.local
-sudo apt update && sudo apt full-upgrade -y
-```
-
-### 3. Install Docker
-
-```sh
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-```
-
-Log out and back in so the group membership applies.
-
-### 4. Allow access to the Stream Deck
-
-The container runs as a non-root user, so the USB device node has to be
-readable/writable for it. Add a udev rule on the **host** for Elgato's vendor id
-`0fd9`:
-
-```sh
-sudo tee /etc/udev/rules.d/99-streamdeck.rules > /dev/null <<'EOF'
-SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", MODE="0666"
-EOF
-
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-```
-
-Unplug and replug the Stream Deck afterwards, then verify it is there:
-
-```sh
-lsusb | grep -i elgato
-```
-
-### 5. Configure and start the service
-
-```sh
-mkdir -p ~/streamdeck && cd ~/streamdeck
-echo '{}' > data.json
-```
-
-Create a `.env` file (see [MQTT settings](#mqtt-settings)) and a `compose.yaml`
-as shown below, then:
-
-```sh
-docker compose up -d
-docker compose logs -f
-```
-
-The log prints the deck type, key count and the serial number — you need that
-serial number if you want to address this deck individually via MQTT.
-
-## Usage
-
-### Docker Images
-
-Pre-built Docker images are available from GitHub Container Registry for multiple architectures:
-- `linux/amd64` (x86_64)
-- `linux/arm64` (Raspberry Pi 4, Pi 400)
-- `linux/arm/v7` (Raspberry Pi 3, Pi Zero 2 W)
-
-Available tags:
-- `latest` - Latest stable release from main branch
-- `main` - Latest commit on main branch
-- `develop` - Latest commit on develop branch
-- `v1.0.0` - Specific version tags
-- `<branch-name>` - Latest commit from any branch
-
-### Using Docker Run
-
-```sh
-docker run -d \
-  --device /dev/bus/usb:/dev/bus/usb \
-  --cap-add=SYS_RAWIO \
-  --env-file .env \
-  -v ./data.json:/app/data.json \
-  ghcr.io/lukasochmann/streamdeck-mqtt:latest
-```
-
-### Using Docker Compose
-
-```yaml
-services:
-  streamdeck:
-    image: ghcr.io/lukasochmann/streamdeck-mqtt:latest
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
-    cap_add:
-      - SYS_RAWIO
-    volumes:
-      - ./data.json:/app/data.json
-    env_file:
-      - .env
-    restart: unless-stopped
-```
-
-You can either mount all USB devices or just the one you need.
-Create a data.json file (can be empty initially), this will persist the config of the keys.
+1. System dependencies
+2. HIDAPI backend fix (hidraw instead of libusb)
+3. Udev rules for USB access
+4. Python venv setup
+5. `.env` and `data.json` configuration
+6. Systemd service for auto-start
 
 
 ## Data.json
